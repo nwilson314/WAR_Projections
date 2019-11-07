@@ -1,0 +1,8 @@
+__pycache__/
+
+preprocessing_old.py
+tests.py
+
+*.py[c]
+*.csv
+*.sqlite-journal
