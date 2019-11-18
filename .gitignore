@@ -1,4 +1,5 @@
 __pycache__/
+env/
 
 preprocessing_old.py
 tests.py

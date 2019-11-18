@@ -25,16 +25,17 @@ def main():
 
 		for i, row in data.iterrows():
 			d = [(row['Season'], row['Name'], row['Team'], row['Age'], row['G'], row['AB'], 
-			row['PA'], row['H'], row['1B'], row['2B'], row['3B'], row['HR'], 
-			row['RBI'], row['SB'], row['AVG'],
-			row['BB%'], row['K%'], row['BB/K'], row['OBP'], row['SLG'], row['OPS'],
-			row['ISO'], row['BABIP'], row['GB/FB'], row['LD%'], row['GB%'], 
-			row['FB%'], row['IFFB%'], row['wOBA'], row['WAR'], row['wRC+'])]
+				row['PA'], row['H'], row['1B'], row['2B'], row['3B'], row['HR'], 
+				row['RBI'], row['SB'], row['AVG'],
+				row['BB%'], row['K%'], row['BB/K'], row['OBP'], row['SLG'], row['OPS'],
+				row['ISO'], row['BABIP'], row['GB/FB'], row['LD%'], row['GB%'], 
+				row['FB%'], row['IFFB%'], row['wOBA'], row['WAR'], row['wRC+'])]
 			
-			c.executemany('INSERT into batting VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ' + 
-			'?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', d)
+			c.executemany('INSERT into batting VALUES (?, ?, ?, ?, ?, ?, ?, ' + 
+				'?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ' + 
+				'?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', d)
 
-		conn.commit()
+	conn.commit()
 
 
 	conn.close()
