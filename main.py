@@ -24,11 +24,21 @@ def get_dataframe(conn):
 
 	return players_df
 
-def basic_database_plot(df):
+def basic_database_plots(df):
+	'''
+	Basic function print visualizations of the database with little to no
+	manipulation. Uses imported matplotlib.pyplot as plt.
+	
+	Params: df, a Pandas dataframe of the database data
+	Returns: nothing
+	'''
 	plt.hist(df['WAR'])
 	plt.xlabel('WAR')
 	plt.title('Dist of WAR')
 	plt.show()
+
+
+
 
 def main():
 	db = Database()
