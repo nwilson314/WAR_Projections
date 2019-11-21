@@ -4,3 +4,4 @@
 - pybaseball: https://github.com/jldbc/pybaseball
 - Pandas
 - Scikit Learn
+- Matplotlib
