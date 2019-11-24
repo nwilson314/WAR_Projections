@@ -28,8 +28,8 @@ def basic_database_plots(df):
 	'''
 	Basic function print visualizations of the database with little to no
 	manipulation. Uses imported matplotlib.pyplot as plt.
-	
-	Params: df, a Pandas dataframe of the database data
+
+	Params: df; a Pandas dataframe of the database data
 	Returns: nothing
 	'''
 	plt.hist(df['WAR'])
@@ -37,8 +37,28 @@ def basic_database_plots(df):
 	plt.title('Dist of WAR')
 	plt.show()
 
+def create_training_test_sets(df):
+	'''
+	Creates training and test sets using the passed pandas dataframe
 
+	Params: df; Pandas dataframe of original data
+	Return: train_df, test_df; Pandas dataframes of the training set and test
+			set respectively
+	'''
 
+	cols = ['Age', 'G', 'AB', 
+				'PA', 'H', '1B', '2B', '3B', 'HR', 
+				'RBI', 'SB', 'AVG',
+				'BB%', 'K%', 'BB/K', 'OBP', 'SLG', 'OPS',
+				'ISO', 'BABIP', 'GB/FB', 'LD%', 'GB%', 
+				'FB%', 'IFFB%', 'wOBA', 'wRC+']
+
+	data = df[cols]
+
+	train_df = data.sample(frac=0.75, random_state=1)
+	test_df = data.loc[~data.index.isin(train_df.index)]
+
+	return train_df, test_df
 
 def main():
 	db = Database()
@@ -55,7 +75,11 @@ def main():
 	players_df['FB%'] = players_df['FB%'].fillna(players_df['FB%'].median())
 	players_df['IFFB%'] = players_df['IFFB%'].fillna(players_df['IFFB%'].median())
 
-	basic_database_plot(players_df)
+	# Use the below command to print out some basic plots to visualize the 
+	# database
+	# basic_database_plot(players_df)
+
+	train_df, test_df = create_training_test_sets(players_df)
 
 	conn.close()
 
