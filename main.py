@@ -158,7 +158,7 @@ def main():
 
 	attributes = ['Age', 'wOBA', 'WAR', 'wRC+']
 
-	years_behind = 3
+	years_behind = 4
 	years_ahead = 4
 
 	create_LR(players_df, attributes, df_cols, years_behind, years_ahead)
