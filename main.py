@@ -8,7 +8,14 @@ from sklearn.linear_model import RidgeCV
 
 DB_NAME = 'database.sqlite'
 
-def get_dataframe(conn, cols):
+def get_dataframe(conn, cols, df_cols):
+	'''
+	Takes a database connection and a list of columns in the database of
+	interest and returns a Pandas dataframe of the selected data. In this case,
+	it will sort the values based on a players name and then in order of 
+	seasons that they played.
+
+	'''
 	c = conn.cursor()
 
 	c.execute("SELECT * FROM batting")
@@ -18,6 +25,11 @@ def get_dataframe(conn, cols):
 	players_df = pd.DataFrame(rows)
 
 	players_df.columns = cols
+
+	players_df = players_df[df_cols]
+
+	players_df = players_df.sort_values(['Name', 'Season'], 
+		ascending=[True, True])
 
 	return players_df
 
@@ -34,7 +46,8 @@ def basic_database_plots(df):
 	plt.title('Dist of WAR')
 	plt.show()
 
-def create_train_set_current_year(df, attributes, cols):
+
+def create_train_set(df, attributes, cols):
 	'''
 	Creates training and test sets using the passed pandas dataframe
 
@@ -51,73 +64,121 @@ def create_train_set_current_year(df, attributes, cols):
 	return train_df, test_df
 
 
-def current_year_LR(train_df, test_df, attributes):
+def LR(train_df, test_df, attributes, prediction):
+	print('in lr')
 	x_train = train_df[attributes]
-	y_train = train_df['WAR']
+	y_train = train_df[prediction]
 
 	x_test = test_df[attributes]
-	y_test = test_df['WAR']
+	y_test = test_df[prediction]
 
 	lr = LinearRegression(normalize=True)
-	lr.fit(x_train, y_train)
-	predictions = lr.predict(x_test)
+	lr = lr.fit(x_train, y_train)
+	pred = lr.predict(x_test)
+
+	# lr = RidgeCV(alphas=(0.001, 0.01, 0.1, 1.0), normalize=True)
+	# lr.fit(x_train, y_train)
+	# pred = lr.predict(x_test)
 
 	# Determine mean absolute error
-	mae = mean_absolute_error(y_test, predictions)
-
+	mae = mean_absolute_error(y_test, pred)
 	# Print `mae`
-	print(mae)
+	print('Mean Absolute Error: \n', mae)
 
-	rrm = RidgeCV(alphas=(0.0001, 0.001, 0.01, 0.1), normalize=True)
-	rrm.fit(x_train, y_train)
-	predictions_rrm = rrm.predict(x_test)
+	# The coefficients
+	print('Coefficients: \n', attributes, lr.coef_)
 
-	# Determine mean absolute error
-	mae_rrm = mean_absolute_error(y_test, predictions_rrm)
-	print(mae_rrm)
+	plt.scatter(y_test, pred, color='black')
+	plt.plot(y_test, y_test, color='blue', linewidth=2)
+	plt.xlabel('Actual WAR')
+	plt.ylabel('Predicted WAR')
+	plt.title('Predicted ' + prediction + ' vs. Actual')
+	plt.show()
 
+	return lr
+
+
+def multiyear_clean_df(df, years_behind, years_ahead, attributes):
+	names = df.groupby('Name').size()
+
+	for name, count in names.items():
+		if count < years_behind + 1 or count < years_ahead + 1:
+			df = df[df.Name != name]
+
+	for i in range(1, years_behind + 1):
+		for att in attributes:
+			df[str(i)+'_Year_Prev_'+att] = df.groupby(['Name'])[att].shift(i)
+
+	for i in range(1, years_ahead + 1):
+		df[str(i)+'_Year_Ahead_WAR'] = df.groupby(['Name'])['WAR'].shift(-i)
+
+
+	df = df.dropna()
+
+	return df
+
+
+def create_LR(players_df, attributes, df_cols, years_behind, years_ahead):
+	players_df = multiyear_clean_df(players_df, years_behind, years_ahead, attributes)
+
+	new_atts = []
+
+	for i in range(1, years_behind + 1):
+		for att in attributes:
+			df_cols.append(str(i)+'_Year_Prev_'+att)
+			new_atts.append(str(i)+'_Year_Prev_'+att)
+
+	attributes.extend(new_atts)
+
+	for i in range(1, years_ahead + 1):
+		df_cols.append(str(i)+'_Year_Ahead_WAR')
+
+	prediction = str(years_ahead) + '_Year_Ahead_WAR'
+
+	train_df, test_df = create_train_set(players_df, attributes, df_cols)
+	lr = LR(train_df, test_df, attributes, prediction)
 
 
 def main():
 	db = Database()
 	conn = db.create_connection(DB_NAME)
 
-	# List of column labels we are using from the database
+	# List of column labels in the database
 	cols = ['Season', 'Name', 'Team', 'Age', 'G', 'AB', 
 				'PA', 'H', '1B', '2B', '3B', 'HR', 
 				'RBI', 'SB', 'AVG',
 				'BB%', 'K%', 'BB/K', 'OBP', 'SLG', 'OPS',
 				'ISO', 'BABIP', 'GB/FB', 'LD%', 'GB%', 
 				'FB%', 'IFFB%', 'wOBA', 'WAR', 'wRC+']
+
+	# List of columbs we actually want in the dataframe
+	df_cols = ['Season', 'Name', 'Age', 'wOBA', 'WAR', 'wRC+']
 	
-	players_df = get_dataframe(conn, cols)
+	players_df = get_dataframe(conn, cols, df_cols)
+
+	attributes = ['Age', 'wOBA', 'WAR', 'wRC+']
+
+	years_behind = 3
+	years_ahead = 4
+
+	create_LR(players_df, attributes, df_cols, years_behind, years_ahead)
+
 
 	# Next line prints the number of NULL rows per column:
 	# print(players_df.isnull().sum(axis=0).tolist())
 
-	# List of attributes we care about from the dataset
-	attributes = ['Age', 'G', 'AB', 
-				'PA', 'H', '1B', '2B', '3B', 'HR', 
-				'RBI', 'SB', 'AVG',
-				'BB%', 'K%', 'BB/K', 'OBP', 'SLG', 'OPS',
-				'ISO', 'BABIP', 'GB/FB', 'LD%', 'GB%', 
-				'FB%', 'IFFB%', 'wOBA', 'wRC+']
-
 	# Turn all NULL values into the median of the non-NULL (might not be smart)
-	players_df['GB/FB'] = players_df['GB/FB'].fillna(players_df['GB/FB'].median())
-	players_df['LD%'] = players_df['LD%'].fillna(players_df['LD%'].median())
-	players_df['GB%'] = players_df['GB%'].fillna(players_df['GB%'].median())
-	players_df['FB%'] = players_df['FB%'].fillna(players_df['FB%'].median())
-	players_df['IFFB%'] = players_df['IFFB%'].fillna(players_df['IFFB%'].median())
+	# players_df['GB/FB'] = players_df['GB/FB'].fillna(players_df['GB/FB'].median())
+	# players_df['LD%'] = players_df['LD%'].fillna(players_df['LD%'].median())
+	# players_df['GB%'] = players_df['GB%'].fillna(players_df['GB%'].median())
+	# players_df['FB%'] = players_df['FB%'].fillna(players_df['FB%'].median())
+	# players_df['IFFB%'] = players_df['IFFB%'].fillna(players_df['IFFB%'].median())
+
 
 	# Use the below command to print out some basic plots to visualize the 
 	# database:
-	# basic_database_plot(players_df)
+	# basic_database_plots(players_df)
 
-	# Use the below for predictions of the current year WAR using only the stats
-	# from that year:
-	# train_df, test_df = create_train_set_current_year(players_df, attributes, cols)
-	# current_year_LR(train_df, test_df, attributes)
 
 	conn.close()
 
