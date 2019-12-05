@@ -1,10 +1,14 @@
 import pandas as pd
+import time
 import sqlite3
 from database import Database
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.linear_model import RidgeCV
+from sklearn.svm import SVR, LinearSVR
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
 
 DB_NAME = 'database.sqlite'
 
@@ -46,6 +50,11 @@ def basic_database_plots(df):
 	plt.title('Dist of WAR')
 	plt.show()
 
+	# plt.hist(df['G'])
+	# plt.xlabel('Games Played')
+	# plt.title('Dist of Games Played per Season')
+	# plt.show()
+
 
 def create_train_set(df, attributes, cols):
 	'''
@@ -62,40 +71,6 @@ def create_train_set(df, attributes, cols):
 	test_df = data.loc[~data.index.isin(train_df.index)]
 
 	return train_df, test_df
-
-
-def LR(train_df, test_df, attributes, prediction):
-	print('in lr')
-	x_train = train_df[attributes]
-	y_train = train_df[prediction]
-
-	x_test = test_df[attributes]
-	y_test = test_df[prediction]
-
-	lr = LinearRegression(normalize=True)
-	lr = lr.fit(x_train, y_train)
-	pred = lr.predict(x_test)
-
-	# lr = RidgeCV(alphas=(0.001, 0.01, 0.1, 1.0), normalize=True)
-	# lr.fit(x_train, y_train)
-	# pred = lr.predict(x_test)
-
-	# Determine mean absolute error
-	mae = mean_absolute_error(y_test, pred)
-	# Print `mae`
-	print('Mean Absolute Error: \n', mae)
-
-	# The coefficients
-	print('Coefficients: \n', attributes, lr.coef_)
-
-	plt.scatter(y_test, pred, color='black')
-	plt.plot(y_test, y_test, color='blue', linewidth=2)
-	plt.xlabel('Actual WAR')
-	plt.ylabel('Predicted WAR')
-	plt.title('Predicted ' + prediction + ' vs. Actual')
-	plt.show()
-
-	return lr
 
 
 def multiyear_clean_df(df, years_behind, years_ahead, attributes):
@@ -117,9 +92,177 @@ def multiyear_clean_df(df, years_behind, years_ahead, attributes):
 
 	return df
 
+def average_WAR(players_df):
+	WAR_count = {}
+	WAR_avg = {}
+	for i in range(16, 70):
+		WAR_count[i] = [0, 0]
+	for key, value in players_df.iterrows():
+		WAR_count[int(value.Age)][0] += value.WAR
+		WAR_count[int(value.Age)][1] += 1
 
-def create_LR(players_df, attributes, df_cols, years_behind, years_ahead):
-	players_df = multiyear_clean_df(players_df, years_behind, years_ahead, attributes)
+	for key, value in WAR_count.items():
+		if value[1] != 0:
+			WAR_avg[key] = value[0] / value[1]
+
+	return WAR_avg
+
+def delta_method(players_df, years_behind, years_ahead, WAR_avg, prediction):
+	pred = []
+	y_test = []
+
+	output = str(years_ahead) + '_Year_Ahead_WAR' 
+	for key, value in players_df.iterrows():
+		y_test.append(value[output])
+		avg = 0
+		for i in range(1, years_behind + 1):
+			j = str(i) + '_Year_Prev_WAR'
+			avg += value[j]
+		avg += value['WAR']
+		avg /= years_behind + 1
+
+		avg_behind = 0
+
+		for i in range(years_behind):
+			avg_behind += WAR_avg[int(value['Age'] - i)]
+		avg_behind /= years_behind + 1
+
+		avg_ahead = WAR_avg[int(value['Age'] + years_ahead)]
+
+		diff = avg_ahead - avg_behind
+
+		pred.append(avg + diff)
+
+	mae = mean_absolute_error(y_test, pred)
+	print('Mean Absolute Error: \n', mae)
+
+	# Determine R2
+	r2 = r2_score(y_test, pred)
+	print('R2: \n', r2)
+
+	fig, ax = plt.subplots()
+	plt.scatter(y_test, pred, color='black')
+	plt.plot(y_test, y_test, color='blue', linewidth=2)
+	plt.xlabel('Actual WAR')
+	plt.ylabel('Predicted WAR')
+	plt.title('Predicted ' + prediction + ' Delta Method')
+	props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+	string = 'MAE: ' + str(mae) + '\nR2: ' + str(r2)
+	plt.text(0.05, 0.95, string, verticalalignment='top', horizontalalignment='left', 
+		bbox=props, transform=ax.transAxes)
+	plt.show()
+
+
+def create_LR(train_df, test_df, attributes, prediction):
+	x_train = train_df[attributes]
+	y_train = train_df[prediction]
+
+	x_test = test_df[attributes]
+	y_test = test_df[prediction]
+
+	# lr = LinearRegression(normalize=True)
+	# lr = lr.fit(x_train, y_train)
+	# pred = lr.predict(x_test)
+
+	lr = RidgeCV(alphas=(0.001, 0.01, 0.1, 1.0, 10.0, 100.0), normalize=True)
+	lr.fit(x_train, y_train)
+	pred = lr.predict(x_test)
+
+	# Determine mean absolute error
+	mae = mean_absolute_error(y_test, pred)
+	# Print `mae`
+	print('Mean Absolute Error: \n', mae)
+
+	# Determine R2
+	r2 = r2_score(y_test, pred)
+	print('R2: \n', r2)
+
+	# The coefficients
+	print('Coefficients: \n', attributes, lr.coef_)
+
+	fig, ax = plt.subplots()
+	plt.scatter(y_test, pred, color='black')
+	plt.plot(y_test, y_test, color='blue', linewidth=2)
+	plt.xlabel('Actual WAR')
+	plt.ylabel('Predicted WAR')
+	plt.title('Predicted ' + prediction + ' Ridge Regression')
+	props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+	string = 'MAE: ' + str(mae) + '\nR2: ' + str(r2)
+	plt.text(0.05, 0.95, string, verticalalignment='top', horizontalalignment='left', 
+		bbox=props, transform=ax.transAxes)
+	plt.show()
+
+	return lr
+
+
+def create_SVR(train_df, test_df, attributes, prediction, k='linear', d=3, 
+			g='auto', e=0.1, c=1.0):
+	start_time = time.time()
+	x_train = train_df[attributes]
+	y_train = train_df[prediction]
+
+	x_test = test_df[attributes]
+	y_test = test_df[prediction]
+
+	# tuned_params = [{'kernel': ['linear'], 'epsilon': [1]}, 
+	# 	{'kernel': ['rbf'], 'gamma': [1e-3, 1e-2, 1e-1, 0, 1, 10],
+	# 				'C': [1, 10, 100, 1000], 'epsilon': [0.01, 0.1, 1, 5, 10],
+	# 				'degree': [1]}]
+
+	scaler = StandardScaler()
+	x_train = scaler.fit_transform(x_train)
+	x_test = scaler.transform(x_test)
+
+	# The below values were found to be optimal using grid search
+	k = 'rbf'
+	d = 1
+	c = 100
+	e = 1.0
+	g = 0.001
+	svr = SVR(kernel=k, degree=d, C=c, gamma=g, epsilon=e)
+	
+	# svr = LinearSVR(epsilon=10.0, max_iter=1000)
+
+	# svr = GridSearchCV(SVR(), tuned_params, scoring='r2')
+
+	svr.fit(x_train, y_train)
+
+	# print("Best parameters set found on development set:")
+	# print()
+	# print(svr.best_params_)
+
+	pred = svr.predict(x_test)
+
+	# Determine mean absolute error
+	mae = mean_absolute_error(y_test, pred)
+	# Print `mae`
+	print('Mean Absolute Error: \n', mae)
+
+	# Determine R2
+	r2 = r2_score(y_test, pred)
+	print('R2: \n', r2)
+
+	print("SVR took --- %s seconds ---" % (time.time() - start_time))
+
+	fig, ax = plt.subplots()
+	plt.scatter(y_test, pred, color='black')
+	plt.plot(y_test, y_test, color='blue', linewidth=2)
+	plt.xlabel('Actual WAR')
+	plt.ylabel('Predicted WAR')
+	plt.title('Predicted ' + prediction + ' SVR')
+	props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+	string = 'MAE: ' + str(mae) + '\nR2: ' + str(r2)
+	plt.text(0.05, 0.95, string, verticalalignment='top', horizontalalignment='left', 
+		bbox=props, transform=ax.transAxes)
+	plt.show()
+
+	
+def start_analysis(players_df_u, attributes, df_cols, years_behind, years_ahead):
+	prediction = str(years_ahead) + '_Year_Ahead_WAR'
+
+	players_df = multiyear_clean_df(players_df_u, years_behind, years_ahead, attributes)
+	
+	WAR_avg = average_WAR(players_df_u)
 
 	new_atts = []
 
@@ -133,13 +276,23 @@ def create_LR(players_df, attributes, df_cols, years_behind, years_ahead):
 	for i in range(1, years_ahead + 1):
 		df_cols.append(str(i)+'_Year_Ahead_WAR')
 
-	prediction = str(years_ahead) + '_Year_Ahead_WAR'
-
 	train_df, test_df = create_train_set(players_df, attributes, df_cols)
-	lr = LR(train_df, test_df, attributes, prediction)
+	
+	lr = create_LR(train_df, test_df, attributes, prediction)
+
+	svr = create_SVR(train_df, test_df, attributes, prediction)
+
+	delta_method(players_df, years_behind, years_ahead, WAR_avg, prediction)
+
 
 
 def main():
+	'''
+	Main part of the program. Sets the columns of the database and the columns
+	of the dataframe to be used in the modeling. In addtion, sets the year
+	ahead to be predicted and the number of previous years to use in predicting
+	the future outcome.
+	'''
 	db = Database()
 	conn = db.create_connection(DB_NAME)
 
@@ -161,7 +314,7 @@ def main():
 	years_behind = 4
 	years_ahead = 4
 
-	create_LR(players_df, attributes, df_cols, years_behind, years_ahead)
+	#start_analysis(players_df, attributes, df_cols, years_behind, years_ahead)
 
 
 	# Next line prints the number of NULL rows per column:
@@ -177,7 +330,7 @@ def main():
 
 	# Use the below command to print out some basic plots to visualize the 
 	# database:
-	# basic_database_plots(players_df)
+	basic_database_plots(players_df)
 
 
 	conn.close()
